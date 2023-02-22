@@ -8,6 +8,7 @@ repository = "https://github.com/sergeiivankov/protoc-prebuilt"
 license = "MIT"
 keywords = ["protobuf", "protoc"]
 categories = ["api-bindings", "development-tools::build-utils", "parsing"]
+exclude = ["changelog.md"]
 
 [dependencies]
 reqwest = { version = "0.11", features = ["blocking", "json"] }
