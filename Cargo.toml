@@ -1,0 +1,18 @@
+[package]
+name = "protoc-prebuilt"
+version = "0.1.0"
+authors = ["Sergei Ivankov <sergeiivankov@pm.me>"]
+edition = "2021"
+description = "Protobuf compiler protoc pre-built binaries installer"
+repository = "https://github.com/sergeiivankov/protoc-prebuilt"
+license = "MIT"
+keywords = ["protobuf", "protoc"]
+categories = ["api-bindings", "development-tools::build-utils", "parsing"]
+
+[dependencies]
+reqwest = { version = "0.11", features = ["blocking", "json"] }
+zip = { version = "0.6", default-features = false, features = ["deflate"] }
+
+[dev-dependencies]
+prost-build = { version = "0.11", default-features = true }
+protobuf-codegen = "3.2"
