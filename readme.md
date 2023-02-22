@@ -9,7 +9,7 @@
 [docs-rs]: https://docs.rs/protoc-prebuilt
 [docs-rs-shields]: https://img.shields.io/docsrs/protoc-prebuilt
 [license]: https://github.com/sergeiivankov/protoc-prebuilt/blob/main/license
-[license-shields]: https://img.shields.io/crates/l/protoc-prebuilt
+[license-shields]: https://img.shields.io/github/license/sergeiivankov/protoc-prebuilt
 
 Protobuf compiler `protoc` pre-built binaries installer.
 
