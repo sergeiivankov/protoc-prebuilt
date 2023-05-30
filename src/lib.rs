@@ -1,10 +1,11 @@
 #![doc = include_str!("../readme.md")]
 
-use reqwest::{ blocking::{ Client, Response }, StatusCode };
+use ureq::{ Agent, Response };
 use std::{
   env::{ consts::{ ARCH, OS }, VarError, var },
   fmt::{ Display, Formatter, Result as FmtResult },
   fs::{ File, remove_file },
+  io::copy,
   path::PathBuf
 };
 use zip::{ result::ZipError, ZipArchive };
@@ -22,13 +23,13 @@ pub enum Error<'a> {
   /// Pre-built binary not provided for current platform and passed version
   NonExistsPlatformVersion(&'a str),
   /// GitHub API response error
-  GitHubApi((StatusCode, String)),
+  GitHubApi((u16, String)),
   /// Read environment variable fail
   VarError(VarError),
   /// I/O operation error
   Io(std::io::Error),
-  /// Reqwest crate error
-  Reqwest(reqwest::Error),
+  /// Ureq crate error
+  Ureq(ureq::Error),
   /// Zip crate error
   Zip(ZipError)
 }
@@ -54,7 +55,7 @@ impl<'a> Display for Error<'a> {
       },
       Error::VarError(err) => write!(f, "{}", err),
       Error::Io(err) => write!(f, "{}", err),
-      Error::Reqwest(err) => write!(f, "{}", err),
+      Error::Ureq(err) => write!(f, "{}", err),
       Error::Zip(err) => write!(f, "{}", err)
     }
   }
@@ -119,45 +120,48 @@ fn get_protoc_asset_name<'a>(
   ))
 }
 
-fn get(url: &str) -> reqwest::Result<Response> {
-  Client::builder().user_agent(CRATE_USER_AGENT).build()?.get(url).send()
+fn get(url: &str) -> Result<Response, ureq::Error> {
+  Agent::new().get(url).set("User-Agent", CRATE_USER_AGENT).call()
 }
 
 fn install<'a>(
   version: &'a str, out_dir: &PathBuf, protoc_asset_name: &String, protoc_out_dir: &PathBuf
 ) -> Result<(), Error<'a>> {
-  // Check passed version
-  let response = get(&format!(
+  match get(&format!(
     "https://api.github.com/repos/protocolbuffers/protobuf/releases/tags/v{}", version
-  )).map_err(|err| Error::Reqwest(err))?;
-
-  let status = response.status();
-  match status {
-    StatusCode::OK => {},
-    StatusCode::NOT_FOUND => return Err(Error::NonExistsVersion(version)),
-    _ => {
-      let text = response.text().map_err(|err| Error::Reqwest(err))?;
-      return Err(Error::GitHubApi((status, text)))
-    }
+  )) {
+    Ok(_) => {},
+    Err(ureq::Error::Status(code, response)) => {
+      match code {
+        404 => return Err(Error::NonExistsVersion(version)),
+        _ => {
+          let text = response.into_string().map_err(|err| Error::Io(err))?;
+          return Err(Error::GitHubApi((code, text)))
+        }
+      }
+    },
+    Err(err) => return Err(Error::Ureq(err))
   }
 
   // Try download binaries
   let protoc_asset_file_name = format!("{}.zip", protoc_asset_name);
 
-  let mut response = get(&format!(
+  let response = match get(&format!(
     "https://github.com/protocolbuffers/protobuf/releases/download/v{}/{}",
     version, protoc_asset_file_name
-  )).map_err(|err| Error::Reqwest(err))?;
-
-  let status = response.status();
-  match status {
-    StatusCode::OK => {},
-    StatusCode::NOT_FOUND => return Err(Error::NonExistsPlatformVersion(version)),
-    _ => {
-      let text = response.text().map_err(|err| Error::Reqwest(err))?;
-      return Err(Error::GitHubApi((status, text)))
-    }
-  }
+  )) {
+    Ok(response) => response,
+    Err(ureq::Error::Status(code, response)) => {
+      match code {
+        404 => return Err(Error::NonExistsPlatformVersion(version)),
+        _ => {
+          let text = response.into_string().map_err(|err| Error::Io(err))?;
+          return Err(Error::GitHubApi((code, text)))
+        }
+      }
+    },
+    Err(err) => return Err(Error::Ureq(err))
+  };
 
   // Write content to file
   let protoc_asset_file_path = out_dir.join(&protoc_asset_file_name);
@@ -169,7 +173,9 @@ fn install<'a>(
     .create(true).read(true).write(true)
     .open(&protoc_asset_file_path)
     .map_err(|err| Error::Io(err))?;
-  response.copy_to(&mut file).map_err(|err| Error::Reqwest(err))?;
+
+  let mut response_reader = response.into_reader();
+  copy(&mut response_reader, &mut file).map_err(|err| Error::Io(err))?;
 
   // Extract archive and delete file
   let mut archive = ZipArchive::new(file).map_err(|err| Error::Zip(err))?;
@@ -211,7 +217,6 @@ pub fn init(version: &str) -> Result<(PathBuf, PathBuf), Error> {
 
 #[cfg(test)]
 mod test {
-  use reqwest::StatusCode;
   use std::env::temp_dir;
   use crate::{
     CRATE_USER_AGENT, Error, prepare_asset_version, get_protoc_asset_name, get, install
@@ -257,7 +262,7 @@ mod test {
   fn get_fail() {
     let result = get("https://bf2d04e1aea451f5b530e4c36666c0f0.com");
     assert!(result.is_err());
-    assert!(matches!(result.unwrap_err(), reqwest::Error { .. }));
+    assert!(matches!(result.unwrap_err(), ureq::Error::Transport { .. }));
   }
 
   #[test]
@@ -266,9 +271,9 @@ mod test {
     assert!(result.is_ok());
 
     let response = result.unwrap();
-    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.status(), 200);
 
-    let text_result = response.text();
+    let text_result = response.into_string();
     assert!(text_result.is_ok());
 
     let text = text_result.unwrap();
@@ -283,6 +288,7 @@ mod test {
     let protoc_out_dir = out_dir.join(&protos_asset_name);
 
     let result = install(version, &out_dir, &protos_asset_name, &protoc_out_dir);
+
     assert!(result.is_err());
     assert!(matches!(result.unwrap_err(), Error::NonExistsVersion { .. }));
   }
