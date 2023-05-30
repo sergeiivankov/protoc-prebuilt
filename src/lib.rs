@@ -6,7 +6,7 @@ use std::{
   fmt::{ Display, Formatter, Result as FmtResult },
   fs::{ File, remove_file },
   io::copy,
-  path::PathBuf
+  path::{ Path, PathBuf }
 };
 use zip::{ result::ZipError, ZipArchive };
 
@@ -29,7 +29,7 @@ pub enum Error<'a> {
   /// I/O operation error
   Io(std::io::Error),
   /// Ureq crate error
-  Ureq(ureq::Error),
+  Ureq(Box<ureq::Error>),
   /// Zip crate error
   Zip(ZipError)
 }
@@ -120,12 +120,13 @@ fn get_protoc_asset_name<'a>(
   ))
 }
 
+#[allow(clippy::result_large_err)]
 fn get(url: &str) -> Result<Response, ureq::Error> {
   Agent::new().get(url).set("User-Agent", CRATE_USER_AGENT).call()
 }
 
 fn install<'a>(
-  version: &'a str, out_dir: &PathBuf, protoc_asset_name: &String, protoc_out_dir: &PathBuf
+  version: &'a str, out_dir: &Path, protoc_asset_name: &String, protoc_out_dir: &PathBuf
 ) -> Result<(), Error<'a>> {
   match get(&format!(
     "https://api.github.com/repos/protocolbuffers/protobuf/releases/tags/v{}", version
@@ -135,12 +136,12 @@ fn install<'a>(
       match code {
         404 => return Err(Error::NonExistsVersion(version)),
         _ => {
-          let text = response.into_string().map_err(|err| Error::Io(err))?;
+          let text = response.into_string().map_err(Error::Io)?;
           return Err(Error::GitHubApi((code, text)))
         }
       }
     },
-    Err(err) => return Err(Error::Ureq(err))
+    Err(err) => return Err(Error::Ureq(Box::new(err)))
   }
 
   // Try download binaries
@@ -155,33 +156,33 @@ fn install<'a>(
       match code {
         404 => return Err(Error::NonExistsPlatformVersion(version)),
         _ => {
-          let text = response.into_string().map_err(|err| Error::Io(err))?;
+          let text = response.into_string().map_err(Error::Io)?;
           return Err(Error::GitHubApi((code, text)))
         }
       }
     },
-    Err(err) => return Err(Error::Ureq(err))
+    Err(err) => return Err(Error::Ureq(Box::new(err)))
   };
 
   // Write content to file
   let protoc_asset_file_path = out_dir.join(&protoc_asset_file_name);
   if protoc_asset_file_path.exists() {
-    remove_file(&protoc_asset_file_path).map_err(|err| Error::Io(err))?;
+    remove_file(&protoc_asset_file_path).map_err(Error::Io)?;
   }
 
   let mut file = File::options()
     .create(true).read(true).write(true)
     .open(&protoc_asset_file_path)
-    .map_err(|err| Error::Io(err))?;
+    .map_err(Error::Io)?;
 
   let mut response_reader = response.into_reader();
-  copy(&mut response_reader, &mut file).map_err(|err| Error::Io(err))?;
+  copy(&mut response_reader, &mut file).map_err(Error::Io)?;
 
   // Extract archive and delete file
-  let mut archive = ZipArchive::new(file).map_err(|err| Error::Zip(err))?;
-  archive.extract(protoc_out_dir).map_err(|err| Error::Zip(err))?;
+  let mut archive = ZipArchive::new(file).map_err(Error::Zip)?;
+  archive.extract(protoc_out_dir).map_err(Error::Zip)?;
 
-  remove_file(&protoc_asset_file_path).map_err(|err| Error::Io(err))?;
+  remove_file(&protoc_asset_file_path).map_err(Error::Io)?;
 
   Ok(())
 }
@@ -195,7 +196,7 @@ fn install<'a>(
 ///
 /// Return a tuple contains paths to `protoc` binary and `include` directory.
 pub fn init(version: &str) -> Result<(PathBuf, PathBuf), Error> {
-  let out_dir = PathBuf::from(var("OUT_DIR").map_err(|err| Error::VarError(err))?);
+  let out_dir = PathBuf::from(var("OUT_DIR").map_err(Error::VarError)?);
 
   let protoc_asset_name = get_protoc_asset_name(version, OS, ARCH)?;
   let protoc_out_dir = out_dir.join(&protoc_asset_name);
@@ -209,7 +210,7 @@ pub fn init(version: &str) -> Result<(PathBuf, PathBuf), Error> {
   protoc_bin.push("bin");
   protoc_bin.push(format!("protoc{}", match OS { "windows" => ".exe", _ => "" }));
 
-  let mut protoc_include = protoc_out_dir.clone();
+  let mut protoc_include = protoc_out_dir;
   protoc_include.push("include");
 
   Ok((protoc_bin, protoc_include))

@@ -38,7 +38,7 @@ fn test_integration() {
 
   // Check installation paths exists
   assert!(metadata(&protoc_bin).is_ok());
-  assert!(metadata(&protoc_include).is_ok());
+  assert!(metadata(protoc_include).is_ok());
 
   // Delete protoc binary to check what in next initialization not run installation
   // To check is installation need out directory with asset subdirectory exists checking,
@@ -51,5 +51,5 @@ fn test_integration() {
   let (protoc_bin, _) = result.unwrap();
 
   // Check protoc binary is not exists
-  assert!(metadata(&protoc_bin).is_err());
+  assert!(metadata(protoc_bin).is_err());
 }
