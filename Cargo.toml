@@ -1,6 +1,6 @@
 [package]
 name = "protoc-prebuilt"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Sergei Ivankov <sergeiivankov@pm.me>"]
 edition = "2021"
 description = "Protobuf compiler protoc pre-built binaries installer"
