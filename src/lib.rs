@@ -1,6 +1,6 @@
 #![doc = include_str!("../readme.md")]
 
-use ureq::{ Agent, Response };
+use ureq::Response;
 use std::{
   env::{ consts::{ ARCH, OS }, VarError, var },
   fmt::{ Display, Formatter, Result as FmtResult },
@@ -122,7 +122,23 @@ fn get_protoc_asset_name<'a>(
 
 #[allow(clippy::result_large_err)]
 fn get(url: &str) -> Result<Response, ureq::Error> {
-  Agent::new().get(url).set("User-Agent", CRATE_USER_AGENT).call()
+  // Use api token if specified via env var.
+  // Prevents 403 errors when IP is throttled by Github API.
+  let gh_token = std::env::var("GITHUB_TOKEN")
+    .ok()
+    .map(|x| x.trim().to_string())
+    .filter(|x| !x.is_empty());
+
+  let request = if let Some(token) = gh_token {
+    ureq::get(url)
+      .set("User-Agent", CRATE_USER_AGENT)
+      .set("Authorization", format!("Bearer {token}").as_str())
+  } else {
+    ureq::get(url)
+      .set("User-Agent", CRATE_USER_AGENT)
+  };
+
+  request.call()
 }
 
 fn install<'a>(
