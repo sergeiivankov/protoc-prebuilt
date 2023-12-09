@@ -1,6 +1,6 @@
 #![doc = include_str!("../readme.md")]
 
-use ureq::{ Agent, Response };
+use ureq::{ Response, request };
 use std::{
   env::{ consts::{ ARCH, OS }, VarError, var },
   fmt::{ Display, Formatter, Result as FmtResult },
@@ -122,7 +122,16 @@ fn get_protoc_asset_name<'a>(
 
 #[allow(clippy::result_large_err)]
 fn get(url: &str) -> Result<Response, ureq::Error> {
-  Agent::new().get(url).set("User-Agent", CRATE_USER_AGENT).call()
+  let mut req = request("GET", url).set("User-Agent", CRATE_USER_AGENT);
+
+  if let Ok(raw_github_token) = var("GITHUB_TOKEN") {
+    let github_token = raw_github_token.trim();
+    if !github_token.is_empty() {
+      req = req.set("Authorization", &format!("Bearer {}", github_token))
+    }
+  }
+
+  req.call()
 }
 
 fn install<'a>(
@@ -218,7 +227,7 @@ pub fn init(version: &str) -> Result<(PathBuf, PathBuf), Error> {
 
 #[cfg(test)]
 mod test {
-  use std::env::temp_dir;
+  use std::env::{ remove_var, set_var, temp_dir };
   use crate::{
     CRATE_USER_AGENT, Error, prepare_asset_version, get_protoc_asset_name, get, install
   };
@@ -279,6 +288,25 @@ mod test {
 
     let text = text_result.unwrap();
     assert!(text.contains(CRATE_USER_AGENT))
+  }
+
+  #[test]
+  // Need to be ignored, because it change environment variable
+  // and it has an influence to other tests,
+  // to test it run `cargo test -- --ignored`
+  #[ignore]
+  fn get_fail_github_token() {
+    set_var("GITHUB_TOKEN", "ghp_000000000000000000000000000000000000");
+    let result = get("https://api.github.com/repos/protocolbuffers/protobuf/releases");
+    remove_var("GITHUB_TOKEN");
+
+    assert!(result.is_err());
+
+    let error = result.unwrap_err();
+    assert!(matches!(error, ureq::Error::Status { .. }));
+
+    let response = error.into_response().unwrap();
+    assert_eq!(response.status(), 401);
   }
 
   #[test]
