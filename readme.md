@@ -66,6 +66,14 @@ fn main() {
 }
 ```
 
+## GitHub API limits
+
+To avoid GitHub API limits library add `Authorization` header to requests to API with `GITHUB_TOKEN` environment variable content.
+
+To prevent this behavior, set `PROTOC_PREBUILT_NOT_ADD_GITHUB_TOKEN` environment variable to any value reduced to `true` (see `var_bool` function in sources).
+
+To force this library to use autorization token from another environment variable, set its name to `PROTOC_PREBUILT_GITHUB_TOKEN_ENV_NAME` environment variable.
+
 ## Comparison with analogues
 
 - [protoc-bin-vendored](https://crates.io/crates/protoc-bin-vendored) store pre-built protobuf compiler in dependencies crates, so you can't use latest or specify version of compiler, if it's not provide by crate author

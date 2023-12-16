@@ -3,6 +3,7 @@
 use ureq::{ Response, request };
 use std::{
   env::{ consts::{ ARCH, OS }, VarError, var },
+  ffi::OsStr,
   fmt::{ Display, Formatter, Result as FmtResult },
   fs::{ File, remove_file },
   io::copy,
@@ -58,6 +59,15 @@ impl<'a> Display for Error<'a> {
       Error::Ureq(err) => write!(f, "{}", err),
       Error::Zip(err) => write!(f, "{}", err)
     }
+  }
+}
+
+// Fetches the environment variable key from the current process and convert result to boolean
+// Err variant and "", "0", "no", "off", "false" values reduced to false
+fn var_bool<K: AsRef<OsStr>>(key: K) -> bool {
+  match var(key) {
+    Ok(value) => !matches!(value.as_str(), "" | "0" | "no" | "off" | "false"),
+    Err(_) => false
   }
 }
 
@@ -124,10 +134,15 @@ fn get_protoc_asset_name<'a>(
 fn get(url: &str) -> Result<Response, ureq::Error> {
   let mut req = request("GET", url).set("User-Agent", CRATE_USER_AGENT);
 
-  if let Ok(raw_github_token) = var("GITHUB_TOKEN") {
-    let github_token = raw_github_token.trim();
-    if !github_token.is_empty() {
-      req = req.set("Authorization", &format!("Bearer {}", github_token))
+  if !var_bool("PROTOC_PREBUILT_NOT_ADD_GITHUB_TOKEN") {
+    let github_token_key = var("PROTOC_PREBUILT_GITHUB_TOKEN_ENV_NAME")
+      .unwrap_or("GITHUB_TOKEN".to_string());
+
+    if let Ok(raw_github_token) = var(github_token_key) {
+      let github_token = raw_github_token.trim();
+      if !github_token.is_empty() {
+        req = req.set("Authorization", &format!("Bearer {}", github_token))
+      }
     }
   }
 
