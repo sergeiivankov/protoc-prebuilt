@@ -62,7 +62,7 @@ impl<'a> Display for Error<'a> {
 }
 
 // In protobuf repository for release cadidate versions used "v22.0-rc3" tag name,
-// for example, but in asset name $VERSION part lokks like "22.0-rc-3"
+// for example, but in asset name $VERSION part looks like "22.0-rc-3"
 // (with `-` delimiter between `rc` prefix and subversion number)
 fn prepare_asset_version(version: &str) -> String {
   if !version.contains("rc") {
