@@ -71,6 +71,21 @@ fn var_bool<K: AsRef<OsStr>>(key: K) -> bool {
   }
 }
 
+// Fetches GitHub authorization token from environment variable
+fn get_github_token() -> Option<String> {
+  if var_bool("PROTOC_PREBUILT_NOT_ADD_GITHUB_TOKEN") {
+    return None
+  }
+
+  let github_token_key = var("PROTOC_PREBUILT_GITHUB_TOKEN_ENV_NAME")
+    .unwrap_or("GITHUB_TOKEN".to_string());
+
+  var(github_token_key)
+    .ok()
+    .map(|value| value.trim().to_string())
+    .filter(|value| !value.is_empty())
+}
+
 // In protobuf repository for release cadidate versions used "v22.0-rc3" tag name,
 // for example, but in asset name $VERSION part looks like "22.0-rc-3"
 // (with `-` delimiter between `rc` prefix and subversion number)
@@ -131,19 +146,11 @@ fn get_protoc_asset_name<'a>(
 }
 
 #[allow(clippy::result_large_err)]
-fn get(url: &str) -> Result<Response, ureq::Error> {
+fn get_with_token(url: &str, token: &Option<String>) -> Result<Response, ureq::Error> {
   let mut req = request("GET", url).set("User-Agent", CRATE_USER_AGENT);
 
-  if !var_bool("PROTOC_PREBUILT_NOT_ADD_GITHUB_TOKEN") {
-    let github_token_key = var("PROTOC_PREBUILT_GITHUB_TOKEN_ENV_NAME")
-      .unwrap_or("GITHUB_TOKEN".to_string());
-
-    if let Ok(raw_github_token) = var(github_token_key) {
-      let github_token = raw_github_token.trim();
-      if !github_token.is_empty() {
-        req = req.set("Authorization", &format!("Bearer {}", github_token))
-      }
-    }
+  if let Some(value) = token {
+    req = req.set("Authorization", &format!("Bearer {}", value))
   }
 
   req.call()
@@ -152,9 +159,12 @@ fn get(url: &str) -> Result<Response, ureq::Error> {
 fn install<'a>(
   version: &'a str, out_dir: &Path, protoc_asset_name: &String, protoc_out_dir: &PathBuf
 ) -> Result<(), Error<'a>> {
-  match get(&format!(
-    "https://api.github.com/repos/protocolbuffers/protobuf/releases/tags/v{}", version
-  )) {
+  let token = get_github_token();
+
+  match get_with_token(
+    &format!("https://api.github.com/repos/protocolbuffers/protobuf/releases/tags/v{}", version),
+    &token
+  ) {
     Ok(_) => {},
     Err(ureq::Error::Status(code, response)) => {
       match code {
@@ -171,10 +181,13 @@ fn install<'a>(
   // Try download binaries
   let protoc_asset_file_name = format!("{}.zip", protoc_asset_name);
 
-  let response = match get(&format!(
-    "https://github.com/protocolbuffers/protobuf/releases/download/v{}/{}",
-    version, protoc_asset_file_name
-  )) {
+  let response = match get_with_token(
+    &format!(
+      "https://github.com/protocolbuffers/protobuf/releases/download/v{}/{}",
+      version, protoc_asset_file_name
+    ),
+    &token
+  ) {
     Ok(response) => response,
     Err(ureq::Error::Status(code, response)) => {
       match code {
@@ -242,9 +255,9 @@ pub fn init(version: &str) -> Result<(PathBuf, PathBuf), Error> {
 
 #[cfg(test)]
 mod test {
-  use std::env::{ remove_var, set_var, temp_dir };
+  use std::env::temp_dir;
   use crate::{
-    CRATE_USER_AGENT, Error, prepare_asset_version, get_protoc_asset_name, get, install
+    CRATE_USER_AGENT, Error, prepare_asset_version, get_protoc_asset_name, get_with_token, install
   };
 
   #[test]
@@ -285,14 +298,14 @@ mod test {
 
   #[test]
   fn get_fail() {
-    let result = get("https://bf2d04e1aea451f5b530e4c36666c0f0.com");
+    let result = get_with_token("https://bf2d04e1aea451f5b530e4c36666c0f0.com", &None);
     assert!(result.is_err());
     assert!(matches!(result.unwrap_err(), ureq::Error::Transport { .. }));
   }
 
   #[test]
   fn get_user_agent() {
-    let result = get("https://httpbin.org/get");
+    let result = get_with_token("https://httpbin.org/get", &None);
     assert!(result.is_ok());
 
     let response = result.unwrap();
@@ -306,14 +319,11 @@ mod test {
   }
 
   #[test]
-  // Need to be ignored, because it change environment variable
-  // and it has an influence to other tests,
-  // to test it run `cargo test -- --ignored`
-  #[ignore]
   fn get_fail_github_token() {
-    set_var("GITHUB_TOKEN", "ghp_000000000000000000000000000000000000");
-    let result = get("https://api.github.com/repos/protocolbuffers/protobuf/releases");
-    remove_var("GITHUB_TOKEN");
+    let result = get_with_token(
+      "https://api.github.com/repos/protocolbuffers/protobuf/releases",
+      &Some("ghp_000000000000000000000000000000000000".to_string())
+    );
 
     assert!(result.is_err());
 
