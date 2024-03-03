@@ -28,7 +28,7 @@ src/
 build.rs
 ```
 
-With [prost-build](https://crates.io/crates/prost-build)
+With [prost-build](https://crates.io/crates/prost-build):
 
 ```rust,no_run
 use prost_build::compile_protos;
@@ -46,7 +46,7 @@ fn main() {
 }
 ```
 
-With [protobuf-codegen](https://crates.io/crates/protobuf-codegen)
+With [protobuf-codegen](https://crates.io/crates/protobuf-codegen):
 
 ```rust,no_run
 use protobuf_codegen::Codegen;
@@ -74,7 +74,15 @@ To prevent this behavior, set `PROTOC_PREBUILT_NOT_ADD_GITHUB_TOKEN` environment
 
 To force this library to use autorization token from another environment variable, set its name to `PROTOC_PREBUILT_GITHUB_TOKEN_ENV_NAME` environment variable.
 
+## Using custom protobuf installation
+
+If you have custom protobuf installation and need to use this installed version, use next environment variables to change default behavior:
+
+- `PROTOC_PREBUILT_FORCE_PROTOC_PATH` to set force use path to `protoc` binary from value of this variable, if it variable exists, `protoc-prebuilt` not download protobuf from GitHub;
+
+- `PROTOC_PREBUILT_FORCE_INCLUDE_PATH` to set force use path to `includes` directory from value of this variable, if it variable not exists, `protoc-prebuilt` calculate path to `includes` directory himself from `protoc` binary path depending on version (see `get_include_path` function in sources).
+
 ## Comparison with analogues
 
-- [protoc-bin-vendored](https://crates.io/crates/protoc-bin-vendored) store pre-built protobuf compiler in dependencies crates, so you can't use latest or specify version of compiler, if it's not provide by crate author
-- [protobuf-src](https://crates.io/crates/protobuf-src) build protobuf compiler from sources, it not support `windows` target and compilers versions hardcoded, so you can't use specify version
+- [protoc-bin-vendored](https://crates.io/crates/protoc-bin-vendored) store pre-built protobuf compiler in dependencies crates, so you can't use latest or specify version of compiler, if it's not provide by crate author;
+- [protobuf-src](https://crates.io/crates/protobuf-src) build protobuf compiler from sources, it not support `windows` target and compilers versions hardcoded, so you can't use specify version.

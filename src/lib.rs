@@ -5,7 +5,7 @@ use std::{
   env::{ consts::{ ARCH, OS }, VarError, var },
   ffi::OsStr,
   fmt::{ Display, Formatter, Result as FmtResult },
-  fs::{ File, remove_file },
+  fs::{ metadata, remove_file, File },
   io::copy,
   path::{ Path, PathBuf }
 };
@@ -23,8 +23,13 @@ pub enum Error<'a> {
   NonExistsVersion(&'a str),
   /// Pre-built binary not provided for current platform and passed version
   NonExistsPlatformVersion(&'a str),
+  /// Pre-built binary version check fail, contain tuple with required version
+  /// and version returned by binary calling with "--version" argument
+  VersionCheck((String, String)),
   /// GitHub API response error
   GitHubApi((u16, String)),
+  // Force defined paths error
+  ForcePath(String),
   /// Read environment variable fail
   VarError(VarError),
   /// I/O operation error
@@ -51,8 +56,18 @@ impl<'a> Display for Error<'a> {
           version, OS, ARCH
         )
       },
+      Error::VersionCheck((required, returned)) => {
+        write!(
+          f,
+          "Pre-built binaries version check error: require `{}`, returned `{}`",
+          required, returned
+        )
+      },
       Error::GitHubApi((status, response)) => {
         write!(f, "GitHub API response error: {} {}", status, response)
+      },
+      Error::ForcePath(message) => {
+        write!(f, "Force defined paths error: {}", message)
       },
       Error::VarError(err) => write!(f, "{}", err),
       Error::Io(err) => write!(f, "{}", err),
@@ -145,6 +160,51 @@ fn get_protoc_asset_name<'a>(
   ))
 }
 
+// Generate `include` directory path by protoc version and binary path.
+// `protoc-prebuilt` means that `include` directory located near binary,
+// if it located in another place, use `PROTOC_PREBUILT_FORCE_INCLUDE_PATH` environment variable.
+// Asset staructure information:
+// - binary file located in `bin` directory;
+// - includes located in `include` directory;
+// - before "3.0.0-beta-4" version assets binary file located in root;
+// - from "3.0.0-alpha-3" to "3.0.0-beta-3" (included) `include` directory content located in root.
+// - before "3.0.0-alpha-3" `include` directory content not provided.
+fn get_include_path<'a>(version: &str, protoc_bin: &Path) -> Result<PathBuf, Error<'a>> {
+  let mut protoc_include: PathBuf;
+
+  if let Ok(force_include_path) = var("PROTOC_PREBUILT_FORCE_INCLUDE_PATH") {
+    // Check is passed path exists
+    let attr = match metadata(&force_include_path) {
+      Ok(attr) => attr,
+      Err(_) => return Err(Error::ForcePath(
+        format!("nothing exists by PROTOC_PREBUILT_FORCE_INCLUDE_PATH path {}", force_include_path)
+      ))
+    };
+
+    // Check is directory in passed path
+    if attr.is_file() {
+      return Err(Error::ForcePath(
+        format!("file found by PROTOC_PREBUILT_FORCE_INCLUDE_PATH path {}", force_include_path)
+      ))
+    }
+
+    protoc_include = force_include_path.into();
+  } else {
+    protoc_include = protoc_bin.to_path_buf();
+    // First remove binary name
+    protoc_include.pop();
+    // For old versions no need remove `bin` part and add `includes` part
+    if version != "2.4.1" && version != "2.5.0" && version != "2.6.0" && version != "2.6.1" &&
+       version != "3.0.0-alpha-1" && version != "3.0.0-alpha-2" && version != "3.0.0-alpha-3" &&
+       version != "3.0.0-beta-1" && version != "3.0.0-beta-2" && version != "3.0.0-beta-3" {
+      protoc_include.pop();
+      protoc_include.push("include");
+    }
+  }
+
+  Ok(protoc_include)
+}
+
 #[allow(clippy::result_large_err)]
 fn get_with_token(url: &str, token: &Option<String>) -> Result<Response, ureq::Error> {
   let mut req = request("GET", url).set("User-Agent", CRATE_USER_AGENT);
@@ -233,31 +293,52 @@ fn install<'a>(
 ///
 /// Return a tuple contains paths to `protoc` binary and `include` directory.
 pub fn init(version: &str) -> Result<(PathBuf, PathBuf), Error> {
-  let out_dir = PathBuf::from(var("OUT_DIR").map_err(Error::VarError)?);
+  let mut protoc_bin: PathBuf;
 
-  let protoc_asset_name = get_protoc_asset_name(version, OS, ARCH)?;
-  let protoc_out_dir = out_dir.join(&protoc_asset_name);
+  if let Ok(force_protoc_path) = var("PROTOC_PREBUILT_FORCE_PROTOC_PATH") {
+    // Check is passed path exists
+    let attr = match metadata(&force_protoc_path) {
+      Ok(attr) => attr,
+      Err(_) => return Err(Error::ForcePath(
+        format!("nothing exists by PROTOC_PREBUILT_FORCE_PROTOC_PATH path {}", force_protoc_path)
+      ))
+    };
 
-  // Install if installation directory doesn't exist
-  if !protoc_out_dir.exists() {
-    install(version, &out_dir, &protoc_asset_name, &protoc_out_dir)?;
+    // Check is file in passed path
+    if attr.is_dir() {
+      return Err(Error::ForcePath(
+        format!("directory found by PROTOC_PREBUILT_FORCE_PROTOC_PATH path {}", force_protoc_path)
+      ))
+    }
+
+    protoc_bin = force_protoc_path.into();
+  } else {
+    let out_dir = PathBuf::from(var("OUT_DIR").map_err(Error::VarError)?);
+
+    let protoc_asset_name = get_protoc_asset_name(version, OS, ARCH)?;
+    let protoc_out_dir = out_dir.join(&protoc_asset_name);
+
+    // Install if installation directory doesn't exist
+    if !protoc_out_dir.exists() {
+      install(version, &out_dir, &protoc_asset_name, &protoc_out_dir)?;
+    }
+
+    protoc_bin = protoc_out_dir.clone();
+    protoc_bin.push("bin");
+    protoc_bin.push(format!("protoc{}", match OS { "windows" => ".exe", _ => "" }));
   }
 
-  let mut protoc_bin = protoc_out_dir.clone();
-  protoc_bin.push("bin");
-  protoc_bin.push(format!("protoc{}", match OS { "windows" => ".exe", _ => "" }));
-
-  let mut protoc_include = protoc_out_dir;
-  protoc_include.push("include");
+  let protoc_include = get_include_path(version, &protoc_bin)?;
 
   Ok((protoc_bin, protoc_include))
 }
 
 #[cfg(test)]
 mod test {
-  use std::env::temp_dir;
+  use std::{ env::temp_dir, path::Path };
   use crate::{
-    CRATE_USER_AGENT, Error, prepare_asset_version, get_protoc_asset_name, get_with_token, install
+    CRATE_USER_AGENT, Error,
+    prepare_asset_version, get_protoc_asset_name, get_include_path, get_with_token, install
   };
 
   #[test]
@@ -294,6 +375,25 @@ mod test {
       get_protoc_asset_name("21.12", "windows", "x86_64"),
       "protoc-21.12-win64"
     );
+  }
+
+  #[test]
+  fn get_include_paths() {
+    let protoc_bin = Path::new("/opt/protoc/22.0/bin/protoc");
+
+    let result = get_include_path("22.0", protoc_bin);
+    assert!(result.is_ok());
+
+    let protoc_include = result.unwrap();
+    assert_eq!(protoc_include, Path::new("/opt/protoc/22.0/include"));
+
+    let protoc_bin = Path::new("/opt/protoc/2.4.1/protoc");
+
+    let result = get_include_path("2.4.1", protoc_bin);
+    assert!(result.is_ok());
+
+    let protoc_include = result.unwrap();
+    assert_eq!(protoc_include, Path::new("/opt/protoc/2.4.1"));
   }
 
   #[test]
