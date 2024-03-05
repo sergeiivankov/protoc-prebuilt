@@ -5,14 +5,12 @@ use std::{
   path::PathBuf
 };
 
-// Store out directory path in struct to clear test artifacts in drop implementation
-struct OutDir {
-  path: PathBuf
-}
+// Store directory path in struct to clear test artifacts in drop implementation
+struct DirectoryPath(PathBuf);
 
-impl Drop for OutDir {
+impl Drop for DirectoryPath {
   fn drop(&mut self) {
-    remove_dir_all(&self.path).unwrap();
+    remove_dir_all(&self.0).unwrap();
   }
 }
 
@@ -26,10 +24,10 @@ fn test_integration() {
   assert!(matches!(result.unwrap_err(), Error::VarError { .. }));
 
   // Create environment variable "OUT_DIR" pointed to temp directory, having previously cleared
-  let out_dir = OutDir { path: temp_dir().join("protoc-prebuilt-integration") };
-  remove_dir_all(&out_dir.path).ok();
-  create_dir_all(&out_dir.path).unwrap();
-  set_var("OUT_DIR", out_dir.path.to_str().unwrap());
+  let out_dir = DirectoryPath(temp_dir().join("protoc-prebuilt-integration"));
+  remove_dir_all(&out_dir.0).ok();
+  create_dir_all(&out_dir.0).unwrap();
+  set_var("OUT_DIR", out_dir.0.to_str().unwrap());
 
   // Init crate for first time
   let result = init(version);
