@@ -1,6 +1,6 @@
 # Changelog
 
-## Not released
+## 0.3.0 - 2024-03-06
 
 - Add authorization in GitHub API usage to avoid API limits
 - Using custom protobuf installation
