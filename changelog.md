@@ -4,6 +4,7 @@
 
 - Add authorization in GitHub API usage to avoid API limits
 - Using custom protobuf installation
+- Add check `protoc` binary file exists, run it with "--version" argument and compare returned version with required
 - Add `VersionCheck` and `ForcePath` lib `Error` variants
 
 Thanks:

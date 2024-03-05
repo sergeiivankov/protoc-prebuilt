@@ -82,6 +82,10 @@ If you have custom protobuf installation and need to use this installed version,
 
 - `PROTOC_PREBUILT_FORCE_INCLUDE_PATH` to set force use path to `includes` directory from value of this variable, if it variable not exists, `protoc-prebuilt` calculate path to `includes` directory himself from `protoc` binary path depending on version (see `get_include_path` function in sources).
 
+## Version checking
+
+By default `protoc-prebuilt` after installation run `protoc` binary with "--version" argument and compare result with required version. It need to make sure the installation is correct and check version of custom protobuf installation. If you need disable this behavior, set `PROTOC_PREBUILT_NOT_CHECK_VERSION` environment variable to any value reduced to `true` (see `var_bool` function in sources).
+
 ## Comparison with analogues
 
 - [protoc-bin-vendored](https://crates.io/crates/protoc-bin-vendored) store pre-built protobuf compiler in dependencies crates, so you can't use latest or specify version of compiler, if it's not provide by crate author;

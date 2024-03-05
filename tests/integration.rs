@@ -24,7 +24,7 @@ fn test_integration() {
   assert!(matches!(result.unwrap_err(), Error::VarError { .. }));
 
   // Create environment variable "OUT_DIR" pointed to temp directory, having previously cleared
-  let out_dir = DirectoryPath(temp_dir().join("protoc-prebuilt-integration"));
+  let out_dir = DirectoryPath(temp_dir().join("protoc-prebuilt-test").join("integration"));
   remove_dir_all(&out_dir.0).ok();
   create_dir_all(&out_dir.0).unwrap();
   set_var("OUT_DIR", out_dir.0.to_str().unwrap());
@@ -39,15 +39,12 @@ fn test_integration() {
   assert!(metadata(protoc_include).is_ok());
 
   // Delete protoc binary to check what in next initialization not run installation
-  // To check is installation need out directory with asset subdirectory exists checking,
-  // not it content
   remove_file(&protoc_bin).unwrap();
 
   // Init crate for second time
   let result = init(version);
-  assert!(result.is_ok());
-  let (protoc_bin, _) = result.unwrap();
-
-  // Check protoc binary is not exists
-  assert!(metadata(protoc_bin).is_err());
+  println!("{:?}", result);
+  // Check that it return Error::Io (binary file not exists)
+  assert!(result.is_err());
+  assert!(matches!(result.unwrap_err(), Error::Io { .. }));
 }

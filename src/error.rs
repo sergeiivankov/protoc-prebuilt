@@ -15,7 +15,7 @@ pub enum Error<'a> {
   NonExistsPlatformVersion(&'a str),
   /// Pre-built binary version check fail, contain tuple with required version
   /// and version returned by binary calling with "--version" argument
-  VersionCheck((&'a str, &'a str)),
+  VersionCheck((&'a str, String)),
   /// GitHub API response error
   GitHubApi((u16, String)),
   // Force defined paths error

@@ -36,6 +36,71 @@ fn prepare_asset_version(version: &str) -> String {
   format!("{}rc-{}", parts.0, parts.1)
 }
 
+// Compare required protobuf compiler version with version returned
+// by calling protoc with "--version" argument
+//
+// Last protobuf compiler versions return same version as in GitHub tag name
+//
+// Exceptional cases:
+// - before "3.14.0-rc1" version release candidates, alpha and beta versions return same name
+//   as main version, for example, "3.13.0-rc3" return "3.13.0", "3.0.0-beta-1" return "3.0.0"
+// - "21.*" versions returns "3.21.*"
+//
+// Next protobuf compiler versions return error version values:
+// - "3.0.2" -> "3.0.0"
+// - "3.10.0-rc1" -> "30.10.0"
+// - "3.12.2" -> "3.12.1"
+// - "3.19.0-rc2" -> "3.19.0-rc1"
+// - "21.0-rc1" -> "" (return nothing if call with "--version" argument)
+// - "21.0-rc2" -> "" (return nothing if call with "--version" argument)
+pub(crate) fn compare_versions(required: &str, returned: &str) -> bool {
+  // Protobuf errors
+  if (required == "3.0.2" && returned == "3.0.0") ||
+     (required == "3.10.0-rc1" && returned == "30.10.0") ||
+     (required == "3.12.2" && returned == "3.12.1") ||
+     (required == "3.19.0-rc2" && returned == "3.19.0-rc1") ||
+     (returned.is_empty() && (required == "21.0-rc1" || required == "21.0-rc2"))
+  {
+    return true
+  }
+
+  // Non default `rc` versions names
+  if (required == "3.2.0rc2" && returned == "3.2.0") ||
+     (
+       (required == "3.7.0rc1" || required == "3.7.0rc2" || required == "3.7.0-rc.3") &&
+       returned == "3.7.0"
+     )
+  {
+    return true
+  }
+
+  // Old `rc` versions
+  if required.contains("-rc") &&
+     (required.starts_with("3.8.") || required.starts_with("3.9.") ||
+      required.starts_with("3.10.") || required.starts_with("3.11.") ||
+      required.starts_with("3.12.") || required.starts_with("3.13.")
+     )
+  {
+    return required.split_once("-rc").unwrap().0 == returned
+  }
+
+  // 21.* versions
+  if required.starts_with("21.") {
+    return format!("3.{}", required) == returned
+  }
+
+  // Alpha and beta versions
+  if (required == "3.0.0-alpha-1" || required == "3.0.0-alpha-2" || required == "3.0.0-alpha-3" ||
+      required == "3.0.0-beta-1" || required == "3.0.0-beta-2" ||
+      required == "3.0.0-beta-3" || required == "3.0.0-beta-4") &&
+     returned == "3.0.0"
+  {
+    return true
+  }
+
+  required == returned
+}
+
 // Format protoc pre-built package name by `protoc-$VERSION-$PLATFORM` view,
 // depending on protobuf version, target os and architecture
 //
@@ -100,7 +165,7 @@ pub(crate) fn get_protoc_asset_name<'a>(
 #[cfg(test)]
 mod test {
   use crate::error::Error;
-  use super::{ get_protoc_asset_name, prepare_asset_version };
+  use super::{ compare_versions, get_protoc_asset_name, prepare_asset_version };
 
   fn check_protoc_assets_name_ok(result: Result<String, Error>, expect: &str) {
     assert!(result.is_ok());
@@ -110,6 +175,52 @@ mod test {
   fn check_get_protoc_asset_name_err(result: Result<String, Error>) {
     assert!(result.is_err());
     assert!(matches!(result.unwrap_err(), Error::NotProvidedPlatform { .. }));
+  }
+
+  #[test]
+  fn compare_version_correct() {
+    assert!(compare_versions("2.6.1", "2.6.1"));
+    assert!(compare_versions("3.5.0", "3.5.0"));
+    assert!(compare_versions("3.14.0-rc2", "3.14.0-rc2"));
+    assert!(compare_versions("3.15.0-rc1", "3.15.0-rc1"));
+    assert!(compare_versions("3.19.5", "3.19.5"));
+    assert!(compare_versions("22.0", "22.0"));
+    assert!(compare_versions("26.0-rc1", "26.0-rc1"));
+  }
+
+  #[test]
+  fn compare_version_incorrect() {
+    assert!(!compare_versions("2.4.1", "2.5.0"));
+    assert!(!compare_versions("3.14.0-rc2", "3.14.0"));
+  }
+
+  #[test]
+  fn compare_version_old_rc_alpha_beta() {
+    assert!(compare_versions("3.0.0-alpha-1", "3.0.0"));
+    assert!(compare_versions("3.0.0-beta-4", "3.0.0"));
+    assert!(compare_versions("3.2.0rc2", "3.2.0"));
+    assert!(compare_versions("3.7.0rc1", "3.7.0"));
+    assert!(compare_versions("3.7.0-rc.3", "3.7.0"));
+    assert!(compare_versions("3.8.0-rc1", "3.8.0"));
+    assert!(compare_versions("3.8.0-rc1", "3.8.0"));
+    assert!(compare_versions("3.11.0-rc2", "3.11.0"));
+    assert!(compare_versions("3.13.0-rc3", "3.13.0"));
+  }
+
+  #[test]
+  fn compare_version_21x() {
+    assert!(compare_versions("21.0", "3.21.0"));
+    assert!(compare_versions("21.12", "3.21.12"));
+  }
+
+  #[test]
+  fn compare_version_protoc_errors() {
+    assert!(compare_versions("3.0.2", "3.0.0"));
+    assert!(compare_versions("3.10.0-rc1", "30.10.0"));
+    assert!(compare_versions("3.12.2", "3.12.1"));
+    assert!(compare_versions("3.19.0-rc2", "3.19.0-rc1"));
+    assert!(compare_versions("21.0-rc1", ""));
+    assert!(compare_versions("21.0-rc2", ""));
   }
 
   #[test]
