@@ -12,7 +12,8 @@ use std::{ env::consts::OS, path::{ Path, PathBuf } };
 fn is_binary_in_root(version: &str) -> bool {
   version == "2.4.1" || version == "2.5.0" || version == "2.6.0" || version == "2.6.1" ||
   version == "3.0.0-alpha-1" || version == "3.0.0-alpha-2" || version == "3.0.0-alpha-3" ||
-  version == "3.0.0-beta-1" || version == "3.0.0-beta-2" || version == "3.0.0-beta-3"
+  version == "3.0.0-beta-1" || version == "3.0.0-beta-2" ||
+  version == "3.0.0-beta-3" || version == "3.0.0-beta-4"
 }
 
 // Generate binary path path by protoc version and out directory path,
