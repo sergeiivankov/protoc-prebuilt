@@ -4,6 +4,7 @@
 
 - Add authorization in GitHub API usage to avoid API limits
 - Using custom protobuf installation
+- Using HTTP proxy from environment variables
 - Add check `protoc` binary file exists, run it with "--version" argument and compare returned version with required
 - Add `VersionCheck` and `ForcePath` lib `Error` variants
 
@@ -12,6 +13,7 @@ Thanks:
 - [Frank Laub](https://github.com/flaub)
 - [scx1332](https://github.com/scx1332)
 - [Someone](https://github.com/SomeoneSerge)
+- [Vincent Yang](https://github.com/soloist-v)
 
 ## 0.2.0 - 2023-05-30
 

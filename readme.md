@@ -82,9 +82,19 @@ If you have custom protobuf installation and need to use this installed version,
 
 - `PROTOC_PREBUILT_FORCE_INCLUDE_PATH` to set force use path to `includes` directory from value of this variable, if it variable not exists, `protoc-prebuilt` calculate path to `includes` directory himself from `protoc` binary path depending on version (see `get_include_path` function in sources).
 
+## Using HTTP proxy for request to GitHub API
+
+For setup HTTP proxy `protoc-prebuilt` use environment variables same as [curl does it](https://everything.curl.dev/usingcurl/proxies/env). Library use `HTTP_PROXY`, `HTTPS_PROXY` and them lowercase analogues.
+
+To disable proxy usage with `curl` agreement you can add `github.com` (to bypass proxy in asset downloading), `api.github.com` (to bypass proxy in version exists cheking), `.github.com` (to bypass proxy in both variants) to `NO_PROXY` or `no_proxy` environment variable.
+
+To disable any use of proxy in `protoc-prebuilt` set `PROTOC_PREBUILT_NOT_USE_PROXY` environment variable to any value reduced to `true` (see `var_bool` function in sources).
+
 ## Version checking
 
-By default `protoc-prebuilt` after installation run `protoc` binary with "--version" argument and compare result with required version. It need to make sure the installation is correct and check version of custom protobuf installation. If you need disable this behavior, set `PROTOC_PREBUILT_NOT_CHECK_VERSION` environment variable to any value reduced to `true` (see `var_bool` function in sources).
+After installation `protoc-prebuilt` run `protoc` binary with "--version" argument and compare result with required version. It need to make sure the installation is correct and check version of custom protobuf installation.
+
+If you need disable this behavior, set `PROTOC_PREBUILT_NOT_CHECK_VERSION` environment variable to any value reduced to `true` (see `var_bool` function in sources).
 
 ## Comparison with analogues
 
