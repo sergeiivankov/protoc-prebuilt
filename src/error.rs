@@ -9,16 +9,17 @@ use zip::result::ZipError;
 pub enum Error<'a> {
   /// Pre-built binary not provided for current platform
   NotProvidedPlatform,
-  /// Passed version not exists
+  /// Required version not exists, contain required version
   NonExistsVersion(&'a str),
-  /// Pre-built binary not provided for current platform and passed version
+  /// Pre-built binary not provided for current platform and required version,
+  /// contain required version
   NonExistsPlatformVersion(&'a str),
   /// Pre-built binary version check fail, contain tuple with required version
   /// and version returned by binary calling with "--version" argument
   VersionCheck((&'a str, String)),
-  /// GitHub API response error
+  /// GitHub API response error, contain response code and body text
   GitHubApi((u16, String)),
-  // Force defined paths error
+  /// Force defined paths error, contain error message
   ForcePath(String),
   /// Read environment variable fail
   VarError(VarError),
