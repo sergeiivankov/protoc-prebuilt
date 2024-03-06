@@ -82,7 +82,7 @@ If you have custom protobuf installation and need to use this installed version,
 
 - `PROTOC_PREBUILT_FORCE_INCLUDE_PATH` to set force use path to `includes` directory from value of this variable, if it variable not exists, `protoc-prebuilt` calculate path to `includes` directory himself from `protoc` binary path depending on version (see `get_include_path` function in sources).
 
-## Using HTTP proxy for request to GitHub API
+## Using HTTP proxy for requests to GitHub API
 
 For setup HTTP proxy `protoc-prebuilt` use environment variables same as [curl does it](https://everything.curl.dev/usingcurl/proxies/env). Library use `HTTP_PROXY`, `HTTPS_PROXY` and them lowercase analogues.
 
